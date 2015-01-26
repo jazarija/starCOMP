@@ -13,20 +13,20 @@
 #define N 19
 
 /* Size of graph with just two vertices in one bipartition */
-#define NSMALL 16
+#define NSMALL 17
 
 /* Size/valency of the original graph */
 #define NTOT 76 
 #define VAL 30
 
-#define BIPART_MIN 14
+#define BIPART_MIN 15
 #define BIPART_MAX 18
 
 /* Forbidden eigenvalue of the star complement */
 #define SC_EIG 2
 
-/* edges that can be added to our graph when extending */
-#define NEDGES 10 
+/* number of edges that can be added to our graph when extending */
+#define NEDGES (( BIPART_MAX-BIPART_MIN + 1) * (BIPART_MAX-BIPART_MIN)/2)
 
 #define EPS 0.000001
 
@@ -105,7 +105,7 @@ char *adjtog6() {
 */
 
 /* TODO make it work so that it iterates over half the matrix */
-static gsl_matrix *partitioned_am(gsl_matrix *adj, gsl_matrix *partitioned_adj, unsigned size) {
+static gsl_matrix *partitioned_am(gsl_matrix *adj, gsl_matrix *partitioned_adj, unsigned n) {
 
     unsigned i,j;
 
@@ -113,29 +113,29 @@ static gsl_matrix *partitioned_am(gsl_matrix *adj, gsl_matrix *partitioned_adj, 
 
     gsl_matrix_set_zero(partitioned_adj);
 
-    for (i= 0; i < size; i++) {
+    for (i= 0; i < n; i++) {
         unsigned deg = 0;
-        for (j = 0; j < size; j++) {
+        for (j = 0; j < n; j++) {
             unsigned el = gsl_matrix_get(adj,i,j);
             if (el)  {
                 gsl_matrix_set(partitioned_adj, i,j,1);
                 deg+=1;
             }   
         }
-        gsl_matrix_set(partitioned_adj,i,size, VAL-deg);
-        gsl_matrix_set(partitioned_adj,size,i, (double)(VAL-deg)/(NTOT-size));
+        gsl_matrix_set(partitioned_adj,i, n, VAL-deg);
+        gsl_matrix_set(partitioned_adj, n,i, (double)(VAL-deg)/(NTOT-n));
         total_edges += deg;
     }
-    gsl_matrix_set(partitioned_adj,size,size, (double) 2*(NTOT*VAL/2 + total_edges/2 - size*VAL)/(NTOT-size));
+    gsl_matrix_set(partitioned_adj,n, n, (double) 2*(NTOT*VAL/2 + total_edges/2 - n*VAL)/(NTOT-n));
 
     return partitioned_adj;
 }
 
-int cmp(const void* elem1, const void* elem2) {
+static int cmp(const void* elem1, const void* elem2) {
 
-    if(*(const double*)elem1 > *(const double*)elem2)
-        return -1;
-    return *(const double*)elem1 < *(const double*)elem2;
+    const double *a = elem1, *b = elem2; 
+    
+    return *a > *b ? -1 : *a < *b ? 1 : 0;
 }
 
 static gsl_vector_complex *eval_small;
@@ -159,31 +159,51 @@ static double *spectrum(gsl_matrix *m,gsl_vector_complex *eval, gsl_matrix_compl
     return eigs;
 }
 
-/* TODO. Maybe it would be nice to check at each index 
-   the interlacing fails the most and test that first */
+
 static unsigned does_interlace(double eigs_sc[N+1],unsigned size) {
+unsigned i;
+for (i = 1; i < size+1; i++) {
+unsigned x1 = i-1;
+unsigned x2 = NTOT - size + i - 1;
+double expr = eigenvalues[x1]-eigs_sc[x1];
+if (expr <= EPS && fabs(expr) >= EPS) {
+return 0;
+}
+expr = eigs_sc[x1] - eigenvalues[x2];
+if (expr <= EPS && fabs(expr) >= EPS) {
+return 0;
+}
+}
+return 1;
+}
+
+
+/* 
+   This function returns 1 if and only if 
+   the seqeucne eigs_sc interlaces eigs 
+*/
+static unsigned does_interlace(double eigs_sc[N+1], unsigned n) {
 
     unsigned i;
 
-    for (i = 1; i < size+1; i++) {
+    for (i = 0; i < n; i++) {
 
-        unsigned x1 = i-1;
-        unsigned x2 = NTOT - size + i - 1;
-       
-        double expr = eigenvalues[x1]-eigs_sc[x1];
+        double expr = eigenvalues[i]-eigs_sc[i];
+
         if (expr <= EPS && fabs(expr) >= EPS) { 
             return 0;    
         }
 
-        expr = eigs_sc[x1] - eigenvalues[x2];
+        expr = eigs_sc[i] - eigenvalues[NTOT-n+i];
 
         if (expr <= EPS && fabs(expr) >= EPS) {
             return 0;
         } 
     }
-    return 1; 
 
+    return 1; 
 }
+
 
 static unsigned is_valid_sc_cand(gsl_matrix *adj) {
 
@@ -214,11 +234,21 @@ static unsigned is_valid_sc_cand(gsl_matrix *adj) {
 
 /* Given the current graph stored in adj this function
    computes the number of valid edges that can be added
-   to its bipartition */
-unsigned valid_edges() {
+   to its bipartition 
+
+   If there is a pair of vertices inducing a bipartition
+   that does not interlace as well after adding an edge,
+   then we return NEDGES+1.
+
+   forced_edges is a bitmask containing the edges that must
+   be present in any extension.
+*/
+static unsigned valid_edges(unsigned *forced_edges) {
     
     unsigned i,j, ret = 0;
-    unsigned k,l;
+    unsigned k;
+
+    *forced_edges = 0;
 
     for (i = BIPART_MIN ; i <= BIPART_MAX; i++) {
         for (j = i+1; j <= BIPART_MAX; j++) {
@@ -241,15 +271,32 @@ unsigned valid_edges() {
                 }
 
             }
+            /* An edge can be present in the bipartition or not. If both
+               cases do not interlace then the graph in question is not
+               good. */
+            
+            gsl_matrix *m = partitioned_am(adj_small, partitioned_adj_small, NSMALL);
+            double *eigs = spectrum(m, eval_small, evec_small, w_small, NSMALL+1);
+
+            unsigned no_edge = does_interlace(eigs, NSMALL+1);
+
             gsl_matrix_set(adj_small, BIPART_MIN+1, BIPART_MIN, 1);
             gsl_matrix_set(adj_small, BIPART_MIN, BIPART_MIN+1, 1);
-            /* we now just need to copy over the adjacency of i and j */
         
-            gsl_matrix *m = partitioned_am(adj_small, partitioned_adj_small, NSMALL);
+            m = partitioned_am(adj_small, partitioned_adj_small, NSMALL);
             
-            double *eigs = spectrum(m,eval_small, evec_small, w_small, NSMALL+1);
+            eigs = spectrum(m, eval_small, evec_small, w_small, NSMALL+1);
 
-            if (does_interlace(eigs, NSMALL+1)) {
+            unsigned edge = does_interlace(eigs, NSMALL+1);
+
+            if (no_edge == 0 && edge == 0) {
+                return NEDGES+1;
+            }
+
+            if (edge) {     
+                if (no_edge == 0) {
+                    *forced_edges |= (1<<ret);
+                }
                 edges[ret][0] = i;
                 edges[ret][1] = j;
                 ret++;
@@ -263,9 +310,18 @@ static void expand() {
 
     unsigned i,j,x,y;
 
-    unsigned num_cand_edges = valid_edges();
+    unsigned forced_edges;
+    unsigned num_cand_edges = valid_edges(&forced_edges);
+
+    /* THIS graph is not extendible. */
+    if (num_cand_edges == NEDGES+1) {
+        return;
+    }
 
     for (i = 0; i < 1<<num_cand_edges; i++) {
+        if (i & forced_edges != forced_edges) {
+            continue;
+        }
 
         unsigned edges_set[NEDGES][2];
         unsigned num_edges_set = 0;
@@ -303,7 +359,7 @@ static void expand() {
 static void stringtoadj(char *s) {
 
 	char *p;
-	int i,j,k,x;
+	int i,j,k,x = 0;
 
     /* Clear the adjacency matrix */
     gsl_matrix_set_zero(adj);
