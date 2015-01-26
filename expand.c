@@ -159,25 +159,6 @@ static double *spectrum(gsl_matrix *m,gsl_vector_complex *eval, gsl_matrix_compl
     return eigs;
 }
 
-
-static unsigned does_interlace(double eigs_sc[N+1],unsigned size) {
-unsigned i;
-for (i = 1; i < size+1; i++) {
-unsigned x1 = i-1;
-unsigned x2 = NTOT - size + i - 1;
-double expr = eigenvalues[x1]-eigs_sc[x1];
-if (expr <= EPS && fabs(expr) >= EPS) {
-return 0;
-}
-expr = eigs_sc[x1] - eigenvalues[x2];
-if (expr <= EPS && fabs(expr) >= EPS) {
-return 0;
-}
-}
-return 1;
-}
-
-
 /* 
    This function returns 1 if and only if 
    the seqeucne eigs_sc interlaces eigs 
