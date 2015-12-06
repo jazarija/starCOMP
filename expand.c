@@ -45,12 +45,10 @@ static gsl_matrix *partitioned_adj_small;
 
 static gsl_permutation *p; 
 static gsl_vector_complex *eval;
-static gsl_matrix_complex *evec;
-static gsl_eigen_nonsymmv_workspace *w;
+static gsl_eigen_nonsymm_workspace *w;
 
 static gsl_vector_complex *eval_small;
-static gsl_matrix_complex *evec_small;
-static gsl_eigen_nonsymmv_workspace *w_small;
+static gsl_eigen_nonsymm_workspace *w_small;
 
 
 /* After each call to adjtog6, gcode stores the graph6 
@@ -76,7 +74,9 @@ char *adjtog6() {
     for (j = 1; j < N; ++j) {
         for (i = 0; i < j; ++i) {
             x <<= 1;
-            if (gsl_matrix_get(adj, j,i) == 1) x |= 1;
+            if (gsl_matrix_get(adj, j,i) == 1) {
+                x |= 1;
+            }                
 
             if (--k == 0) {
                 *p++ = BIAS6 + x;
@@ -86,7 +86,9 @@ char *adjtog6() {
         }
     }
 
-    if (k != 6) *p++ = BIAS6 + (x << k);
+    if (k != 6) {
+        *p++ = BIAS6 + (x << k);
+    }        
 
     *p++ = '\n';
     *p = '\0';
@@ -138,23 +140,20 @@ static int cmp(const void* elem1, const void* elem2) {
     return *a > *b ? -1 : *a < *b ? 1 : 0;
 }
 
-static gsl_vector_complex *eval_small;
-static gsl_matrix_complex *evec_small;
-static gsl_eigen_nonsymmv_workspace *w_small;
-
-static double *spectrum(gsl_matrix *m,gsl_vector_complex *eval, gsl_matrix_complex *evec, 
-        gsl_eigen_nonsymmv_workspace *w, unsigned size) {
+static double *spectrum(gsl_matrix *m,gsl_vector_complex *eval,  
+        gsl_eigen_nonsymm_workspace *w, unsigned size) {
 
     /* N+1 is an upper bound on eigs, in practice it can be smaller */
     static double eigs[N+1];
     unsigned i;
 
-    gsl_eigen_nonsymmv (m, eval, evec, w);    
+    gsl_eigen_nonsymm (m, eval, w);    
 
     for(i = 0; i < size ; i++) {
         gsl_complex eval_i = gsl_vector_complex_get (eval, i);
         eigs[i] = GSL_REAL(eval_i);
     }
+
     qsort(eigs,size, sizeof(double),cmp); 
     return eigs;
 }
@@ -208,7 +207,7 @@ static unsigned is_valid_sc_cand(gsl_matrix *adj) {
     /* we now make sure the interlacing is satisfied */
     gsl_matrix *m = partitioned_am(adj,partitioned_adj,N);
 
-    double *eigs = spectrum(m,eval, evec, w, N+1);
+    double *eigs = spectrum(m,eval, w, N+1);
     
     return does_interlace(eigs,N+1);
 }
@@ -257,7 +256,7 @@ static unsigned valid_edges(unsigned *forced_edges) {
                good. */
             
             gsl_matrix *m = partitioned_am(adj_small, partitioned_adj_small, NSMALL);
-            double *eigs = spectrum(m, eval_small, evec_small, w_small, NSMALL+1);
+            double *eigs = spectrum(m, eval_small, w_small, NSMALL+1);
 
             unsigned no_edge = does_interlace(eigs, NSMALL+1);
 
@@ -266,7 +265,7 @@ static unsigned valid_edges(unsigned *forced_edges) {
         
             m = partitioned_am(adj_small, partitioned_adj_small, NSMALL);
             
-            eigs = spectrum(m, eval_small, evec_small, w_small, NSMALL+1);
+            eigs = spectrum(m, eval_small, w_small, NSMALL+1);
 
             unsigned edge = does_interlace(eigs, NSMALL+1);
 
@@ -299,8 +298,8 @@ static void expand() {
         return;
     }
 
-    for (i = 0; i < 1<<num_cand_edges; i++) {
-        if (i & forced_edges != forced_edges) {
+    for (i = 0; i < 1U<<num_cand_edges; i++) {
+        if ( (i & forced_edges) != forced_edges) {
             continue;
         }
 
@@ -376,10 +375,10 @@ int main(int argc, char *argv[]) {
 
     static FILE *infile;
 
-	if (argc < 1) {
+    if (argc < 1) {
         return 1; 
-
     } 
+
     char line[G6LEN(N)+2];
     
     infile = fopen(argv[1], "r");
@@ -394,20 +393,18 @@ int main(int argc, char *argv[]) {
     p = gsl_permutation_calloc(N);
     
     eval = gsl_vector_complex_alloc(N+1);
-    evec = gsl_matrix_complex_alloc (N+1, N+1);
-    w = gsl_eigen_nonsymmv_alloc(N+1);
+    w = gsl_eigen_nonsymm_alloc(N+1);
 
     eval_small = gsl_vector_complex_alloc(NSMALL+1);
-    evec_small = gsl_matrix_complex_alloc (NSMALL+1, NSMALL+1);
-    w_small = gsl_eigen_nonsymmv_alloc(NSMALL+1);
+    w_small = gsl_eigen_nonsymm_alloc(NSMALL+1);
     
-    if (!w_small || !evec_small || !eval_small ||!adj_small ||!partitioned_adj_small) {
-        puts("Errrr");
+    if (!w_small || !eval_small ||!adj_small ||!partitioned_adj_small) {
+        fprintf(stderr, "Error allocating required space.");
         return 1;
     }    
 
-    if (!infile || !adj || !p || !partitioned_adj || !eval ||!evec) { 
-        puts("Some error somewhere");
+    if (!infile || !adj || !p || !partitioned_adj || !eval) { 
+        fprintf(stderr, "Error allocating required space.");
         return 1;
     }
 
@@ -423,5 +420,4 @@ int main(int argc, char *argv[]) {
 	}
 
     return 0;
-
 }
