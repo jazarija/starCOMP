@@ -339,8 +339,8 @@ static void expand() {
 
 static void stringtoadj(char *s) {
 
-	char *p;
-	int i,j,k,x = 0;
+    char *p;
+    int i,j,k,x = 0;
 
     /* Clear the adjacency matrix */
     gsl_matrix_set_zero(adj);
@@ -351,8 +351,8 @@ static void stringtoadj(char *s) {
     for (j = 1; j < N; ++j) {
         for (i = 0; i < j; ++i) {
             if (--k == 0) {
-		        k = 6;
-		        x = *(p++) - BIAS6;
+                k = 6;
+                x = *(p++) - BIAS6;
             }
 	    
             if (x & TOPBIT6) {
