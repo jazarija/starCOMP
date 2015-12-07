@@ -9,18 +9,18 @@
 #include <gsl/gsl_eigen.h>
 
 
-/* Size of input graphs - note this code will only work for size smaller than 62 */
-#define N 19
+/* Order of input graphs - note this code will only work for size smaller than 62 */
+#define N 20 
 
-/* Size of graph with just two vertices in one bipartition */
-#define NSMALL 17
+/* Order of graph with just two vertices in one bipartition */
+#define NSMALL 18
 
 /* Size/valency of the original graph */
-#define NTOT 76 
-#define VAL 30
+#define NTOT 95 
+#define VAL 40
 
-#define BIPART_MIN 15
-#define BIPART_MAX 18
+#define BIPART_MIN 16
+#define BIPART_MAX 19
 
 /* Forbidden eigenvalue of the star complement */
 #define SC_EIG 2
@@ -55,9 +55,9 @@ static gsl_eigen_nonsymm_workspace *w_small;
    string of the graph represented by adj */
 static char gcode[G6LEN(N)+3]; 
 
-unsigned  edges[NEDGES][2]; 
+unsigned edges[NEDGES][2]; 
 
-const int eigenvalues[NTOT] = {30, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8};
+const int eigenvalues[NTOT] = {40, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10, -10};
 
 
 /* convert nauty graph to graph6 string, including \n and \0 */
@@ -118,17 +118,17 @@ static gsl_matrix *partitioned_am(gsl_matrix *adj, gsl_matrix *partitioned_adj, 
     for (i= 0; i < n; i++) {
         unsigned deg = 0;
         for (j = 0; j < n; j++) {
-            unsigned el = gsl_matrix_get(adj,i,j);
+            unsigned el = gsl_matrix_get(adj, i, j);
             if (el)  {
-                gsl_matrix_set(partitioned_adj, i,j,1);
+                gsl_matrix_set(partitioned_adj, i, j, 1);
                 deg+=1;
             }   
         }
-        gsl_matrix_set(partitioned_adj,i, n, VAL-deg);
-        gsl_matrix_set(partitioned_adj, n,i, (double)(VAL-deg)/(NTOT-n));
+        gsl_matrix_set(partitioned_adj, i, n, VAL-deg);
+        gsl_matrix_set(partitioned_adj, n, i, (double)(VAL-deg)/(NTOT-n));
         total_edges += deg;
     }
-    gsl_matrix_set(partitioned_adj,n, n, (double) 2*(NTOT*VAL/2 + total_edges/2 - n*VAL)/(NTOT-n));
+    gsl_matrix_set(partitioned_adj, n, n, (double) 2*(NTOT*VAL/2 + total_edges/2 - n*VAL)/(NTOT-n));
 
     return partitioned_adj;
 }
@@ -143,14 +143,14 @@ static int cmp(const void* elem1, const void* elem2) {
 static double *spectrum(gsl_matrix *m,gsl_vector_complex *eval,  
         gsl_eigen_nonsymm_workspace *w, unsigned size) {
 
-    /* N+1 is an upper bound on eigs, in practice it can be smaller */
-    static double eigs[N+1];
     unsigned i;
+    /* N+1 is an upper bound on eig s, in practice it can be smaller */
+    static double eigs[N+1];
 
     gsl_eigen_nonsymm (m, eval, w);    
 
-    for(i = 0; i < size ; i++) {
-        gsl_complex eval_i = gsl_vector_complex_get (eval, i);
+    for(i = 0; i < size; i++) {
+        gsl_complex eval_i = gsl_vector_complex_get(eval, i);
         eigs[i] = GSL_REAL(eval_i);
     }
 
@@ -205,7 +205,7 @@ static unsigned is_valid_sc_cand(gsl_matrix *adj) {
     }        
 
     /* we now make sure the interlacing is satisfied */
-    gsl_matrix *m = partitioned_am(adj,partitioned_adj,N);
+    gsl_matrix *m = partitioned_am(adj, partitioned_adj, N);
 
     double *eigs = spectrum(m,eval, w, N+1);
     
@@ -238,16 +238,17 @@ static unsigned valid_edges(unsigned *forced_edges) {
             gsl_matrix_set_zero(adj_small);
 
             for (k = 0; k < BIPART_MIN; k++) {
-                double val = gsl_matrix_get(adj, k,i);
+                double val = gsl_matrix_get(adj, k, i);
                 if (val) {
-                    gsl_matrix_set(adj_small, k,BIPART_MIN,1);
-                    gsl_matrix_set(adj_small, BIPART_MIN, k,1);
+                    gsl_matrix_set(adj_small, k, BIPART_MIN, 1);
+                    gsl_matrix_set(adj_small, BIPART_MIN, k, 1);
                 }
 
-                val = gsl_matrix_get(adj, k,j);
+                val = gsl_matrix_get(adj, k, j);
+
                 if (val) {
-                    gsl_matrix_set(adj_small, k, BIPART_MIN+1,1);
-                    gsl_matrix_set(adj_small, BIPART_MIN+1, k,1);
+                    gsl_matrix_set(adj_small, k, BIPART_MIN+1, 1);
+                    gsl_matrix_set(adj_small, BIPART_MIN+1, k, 1);
                 }
 
             }
@@ -274,6 +275,7 @@ static unsigned valid_edges(unsigned *forced_edges) {
             }
 
             if (edge) {     
+                /* edge must be present in any extension of G.*/
                 if (no_edge == 0) {
                     *forced_edges |= (1<<ret);
                 }
@@ -286,7 +288,7 @@ static unsigned valid_edges(unsigned *forced_edges) {
     return ret;
 }
 
-static void expand() {
+static void expand(void) {
 
     unsigned i,j,x,y;
 
@@ -319,7 +321,6 @@ static void expand() {
                 num_edges_set++;
             }
         }        
-        
         /* here we have an expanded graph */
         if (is_valid_sc_cand(adj)) {
             printf("%s", adjtog6());
